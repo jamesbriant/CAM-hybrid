@@ -1,0 +1,3 @@
+fincl2='CAPE','DTCOND','PHIS','PRECSC','PRECSL','PRECZ','TMQ','ZMDLF','LHFLX','OMEGA','PRECC','PRECL','PRECT','PS','PSL','Q','QREFHT','T','TS','TREFHT','U','V','Z3','RELHUM','SST','U10'
+mfilt=120
+nhtfrq=-6
