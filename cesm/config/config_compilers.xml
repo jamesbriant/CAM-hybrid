@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config_compilers version="2.0">
+
+<compiler COMPILER="gnu">
+  <NETCDF_PATH>$ENV{NETCDF_PATH}</NETCDF_PATH>
+  <CFLAGS>
+    <base> -std=c99 -fexcess-precision=standard -frounding-math -fsignaling-nans </base>
+    <append> -O3 -fallow-argument-mismatch  -fallow-invalid-boz</append>
+  </CFLAGS>
+  <CPPDEFS>
+    <!-- http://gcc.gnu.org/onlinedocs/gfortran/ -->
+    <append> -DFORTRANUNDERSCORE -DNO_R16 -DCPRGNU</append>
+  </CPPDEFS>
+  <CXX_LINKER>FORTRAN</CXX_LINKER>
+  <FC_AUTO_R8>
+    <base> -fdefault-real-8 </base>
+  </FC_AUTO_R8>
+  <FFLAGS>
+    <base> -ffree-line-length-none -ffixed-line-length-none -fallow-argument-mismatch  -fallow-invalid-boz</base>
+    <append> -O3 </append>
+  </FFLAGS>
+  <FIXEDFLAGS>
+    <base>  -ffixed-form </base>
+  </FIXEDFLAGS>
+  <FREEFLAGS>
+    <base> -ffree-form </base>
+  </FREEFLAGS>
+  <HAS_F2008_CONTIGUOUS>FALSE</HAS_F2008_CONTIGUOUS>
+  <LDFLAGS>
+    <append> -L/usr/local/lib </append>
+    <append> -L/usr/local/ompi/lib </append>
+    <append> -llapack </append>
+    <append> -lblas </append>
+  </LDFLAGS>
+  <MPICC> mpicc  </MPICC>
+  <MPICXX> mpicxx </MPICXX>
+  <MPIFC> mpif90 </MPIFC>
+  <SCC> gcc </SCC>
+  <SCXX> g++ </SCXX>
+  <SFC> gfortran </SFC>
+  <SUPPORTS_CXX>TRUE</SUPPORTS_CXX>
+</compiler>
+
+
+</config_compilers>
+    
