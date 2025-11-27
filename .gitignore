@@ -208,3 +208,7 @@ __marimo__/
 
 # Trained models
 *.pt
+
+# Common folders from this project
+archives/
+comparison_figures/
