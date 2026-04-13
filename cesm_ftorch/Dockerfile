@@ -1,4 +1,6 @@
-FROM cesm:latest
+#FROM cesm:latest
+#FROM docker.io/jamesbriant/cesm:12.9.1
+FROM docker.io/jamesbriant/cesm:latest
 
 # Install dependencies
 #RUN pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu124
@@ -30,6 +32,17 @@ RUN git checkout 162b6e165538ecd9649a67c8331a82ec1eb48f39
 # This specific commit works with the cmake options below.
 # Changing the FTorch version will likely require changing the cmake options.
 
+#WORKDIR /opt/FTorch/build
+#RUN cmake .. \
+#    -DCMAKE_BUILD_TYPE=Release \
+#    -DCMAKE_Fortran_COMPILER=gfortran \
+#    -DCMAKE_C_COMPILER=gcc \
+#    -DCMAKE_CXX_COMPILER=g++ \
+#    -DGPU_DEVICE=CUDA \
+#    -DMULTI_GPU=OFF \
+#    -DCMAKE_PREFIX_PATH=/usr/local/libtorch \
+#    -DCMAKE_INSTALL_PREFIX=/usr/local/ftorch
+
 WORKDIR /opt/FTorch/build
 RUN cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
@@ -37,7 +50,6 @@ RUN cmake .. \
     -DCMAKE_C_COMPILER=gcc \
     -DCMAKE_CXX_COMPILER=g++ \
     -DGPU_DEVICE=CUDA \
-    -DMULTI_GPU=OFF \
     -DCMAKE_PREFIX_PATH=/usr/local/libtorch \
     -DCMAKE_INSTALL_PREFIX=/usr/local/ftorch
 

@@ -1,5 +1,7 @@
 # Use Ubuntu as the base image
-FROM cesm_base:latest
+#FROM localhost/cesm_base:latest
+#FROM docker.io/jamesbriant/cesm_base:12.9.1
+FROM docker.io/jamesbriant/cesm_base:latest
 
 # Add cert ccsm-cert (incommon signed)
 COPY crt/svn-ccsm-cert.crt /usr/local/share/ca-certificates

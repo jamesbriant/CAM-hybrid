@@ -1,5 +1,15 @@
-FROM nvcr.io/nvidia/cuda:12.4.1-devel-ubuntu22.04
+#FROM nvcr.io/nvidia/cuda:12.9.1-devel-ubuntu24.04
+FROM nvcr.io/nvidia/cuda:12.8.1-devel-ubuntu24.04
 #Link: https://catalog.ngc.nvidia.com/orgs/nvidia/containers/cuda/tags
+
+# ARG CC=$(which gcc)
+# ARG CXX=$(which g++)
+# ARG FC=$(which gfortran)
+# # ARG CC=$(which CC)
+# # ARG CXX=$(which cc)
+# # ARG FC=$(which ftn)
+
+ARG N_PROC=8
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -47,10 +57,17 @@ RUN conda install python=3.11
 ##############WWWWW##################################
 # Install GCC, Fortran, MPI, BLAS, LAPACK, and zlib #
 #####################################################
-# Install Fortran
-RUN apt install -y gfortran-11
-RUN ln -s /usr/bin/gfortran-11 /usr/bin/gfortran
+# Install GCC 11 Toolchain to maintain CESM compatibility
+RUN apt-get update && apt-get install -y \
+    gcc-11 \
+    g++-11 \
+    gfortran-11 \
+    && apt-get clean
 
+# Force the system to use the GCC 11 toolchain by default
+RUN ln -sf /usr/bin/gcc-11 /usr/bin/gcc && \
+    ln -sf /usr/bin/g++-11 /usr/bin/g++ && \
+    ln -sf /usr/bin/gfortran-11 /usr/bin/gfortran
 
 #######################################
 # Install MPI, BLAS, LAPACK, and zlib #
@@ -86,7 +103,8 @@ RUN ./configure --prefix=/usr/local/ompi \
     --enable-mpi3-compatibility \
     --with-mpi-params=3 
 
-RUN make -j $(nproc) all \
+# RUN make -j $(nproc) all \
+RUN make -j ${N_PROC} all \
     && make install
 
 ENV PATH=/usr/local/ompi/bin:$PATH
@@ -103,7 +121,8 @@ RUN wget http://www.netlib.org/blas/blas-3.12.0.tgz && \
 
 WORKDIR /opt/blas/build
 RUN cmake .. -DCMAKE_C_COMPILER=$(which gcc) -DCMAKE_CXX_COMPILER=$(which g++) -DCMAKE_Fortran_COMPILER=$(which gfortran) && \
-    make -j $(nproc) && \
+    # make -j $(nproc) && \
+    make -j ${N_PROC} && \
     make install
 
 # Install LAPACK
@@ -117,7 +136,8 @@ RUN wget https://github.com/Reference-LAPACK/lapack/archive/refs/tags/v3.11.0.ta
 WORKDIR /opt/lapack/build
 ENV LAPACK_PATH=/usr/local/lapack
 RUN cmake .. -DCMAKE_C_COMPILER=$(which gcc) -DCMAKE_CXX_COMPILER=$(which g++) -DCMAKE_Fortran_COMPILER=$(which gfortran) && \
-    make -j $(nproc) && \
+    # make -j $(nproc) && \
+    make -j ${N_PROC} && \
     make install 
 
 
@@ -155,7 +175,8 @@ RUN ./configure \
     --enable-static \
     --enable-build-mode=production 
 
-RUN make -j $(nproc) \
+# RUN make -j $(nproc) \
+RUN make -j ${N_PROC} \
     && make install
     
 # Set HDF5 environment variables
@@ -172,7 +193,8 @@ RUN wget https://downloads.unidata.ucar.edu/netcdf-c/4.9.2/netcdf-c-4.9.2.tar.gz
 
 WORKDIR /opt/netcdf-c/build
 RUN cmake .. -DCMAKE_C_COMPILER=$(which gcc) -DCMAKE_CXX_COMPILER=$(which g++) -DCMAKE_Fortran_COMPILER=$(which gfortran) && \
-    make -j $(nproc) && \
+    # make -j $(nproc) && \
+    make -j ${N_PROC} && \
     make install
 
 # Install NetCDF-Fortran
@@ -199,7 +221,8 @@ RUN export CPPFLAGS="-I$(nc-config --includedir)" \
     --enable-shared \
     --enable-static \
     --with-pic && \
-    make -j $(nproc) && \
+    # make -j $(nproc) && \
+    make -j ${N_PROC} && \
     make install
 
 # Make PIO Parallel I/0
@@ -212,6 +235,7 @@ RUN export CPPFLAGS="-I$(nc-config --includedir)" \
 #
 #    WORKDIR /opt/pio/build
 #    RUN cmake -DPIO_ENABLE_FORTRAN=OFF -DCMAKE_C_FLAGS="-fcommon" -DCMAKE_CXX_FLAGS="-fcommon" .. && \
-#        make -j $(nproc) && \
+#        # make -j $(nproc) && \
+#        make -j ${N_PROC} && \
 #        make install
 
