@@ -75,29 +75,29 @@ Use `./manage_cesm.sh create <type> <resolution> <sim_length> <sim_units> <namel
 
 ### Step 4: Build and Generate Slurm Script
 
-Once the case is created, compile the model and prepare it for the scheduler using `./manage_cesm.sh run <type> <case_name> [num_nodes]`.
+Once the case is created, compile the model and prepare it for the scheduler using `./manage_cesm.sh build <type> <case_name> [num_nodes]`.
 
 **Example: Standard mode**
 ```bash
-./manage_cesm.sh run standard F2000climo_30days_lowres_user_nl_cam-standard
+./manage_cesm.sh build standard F2000climo_30days_lowres_user_nl_cam-standard
 ```
 
 **Example: Hybrid mode across 2 nodes**
 ```bash
-./manage_cesm.sh run hybrid F2000climo_30days_lowres_user_nl_cam-hybrid_hybrid 2
+./manage_cesm.sh build hybrid F2000climo_30days_lowres_user_nl_cam_hybrid 2
 ```
 
 This command will:
 1. Compile the CESM executable inside the container.
 2. Download any required input data (e.g., `lowres` boundary conditions).
-3. Generate a submission script named `submit_<case_name>.slurm`.
+3. Generate a submission script named `submit_<case_name>_<num_nodes>nodes.slurm`.
 
 ### Step 5: Launch
 
 Submit the generated script to the Isambard-AI Slurm queue:
 
 ```bash
-sbatch submit_<case_name>.slurm
+sbatch submit_<case_name>_<num_nodes>nodes.slurm
 ```
 
 When the simulation completes successfully, the results will automatically be transferred from the fast scratch storage into the `archives/` directory.
@@ -109,3 +109,11 @@ Only two file changes are made to the CAM codebase.
 `CAM_hybrid/cam/src/physics/cam/cam_gp.F90` is a new file containing the FTorch forward pass (GP prediction) implementation.
 
 `CAM_hybrid/cam/src/physics/cam/physpkg.F90` is a standard CAM file but some lines are changed so that `cam_gp.F90` is called once every 6 simulation hours.
+
+## Nuances of Running on Isambard-AI
+
+Running complex containerized MPI workloads on an HPE Cray EX architecture like Isambard-AI requires a few specific configurations:
+
+- **MPI and PMI Versions (pmi2 vs pmix):** Isambard-AI uses Slurm for job scheduling, which natively interfaces with MPI. We originally investigated using `pmix` and `pmix_v5`, which are standard on many modern HPC systems. However, within the `podman-hpc` container environment on Isambard-AI, we found that compiling with and specifying `--mpi=pmi2` in the `srun` command, combined with passing `--openmpi-pmi2` to the container process, proved to be the only successful combination.
+- **Inter-Process Communication (`--ipc=host`):** By default, containers isolate the IPC namespace. For MPI tasks to communicate efficiently (especially when utilizing GPU acceleration across node boundaries), the container must share the host's IPC namespace. Passing `--ipc=host` to `podman-hpc` prevents shared memory allocation errors and deadlocks during multi-node runs.
+- **Container Device Mounts:** When interacting with GPUs, `podman-hpc` requires the `--gpu` flag to securely mount the NVIDIA devices and CDI (Container Device Interface) configurations from the login and compute nodes seamlessly.
