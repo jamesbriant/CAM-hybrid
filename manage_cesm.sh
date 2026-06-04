@@ -190,6 +190,9 @@ elif [[ "$MODE" == "build" ]]; then
     if [[ ${CASE_NAME} == *"lowres"* ]]; then
         INPUT_MOUNT="-v ${HOST_INPUT_DIR}/lowres/:${CONTAINER_INPUT_DIR}:Z"
         mkdir -p "${HOST_INPUT_DIR}/lowres/"
+    elif [[ ${CASE_NAME} == *"highres"* ]]; then
+        INPUT_MOUNT="-v ${HOST_INPUT_DIR}/highres/:${CONTAINER_INPUT_DIR}:Z"
+        mkdir -p "${HOST_INPUT_DIR}/highres/"
     fi
 
     podman-hpc run -i --rm --pull=never --gpu $AUTH \
@@ -239,7 +242,10 @@ EOF
     
     if [[ ${CASE_NAME} == *"lowres"* ]]; then
         VOLUMES="${VOLUMES} -v ${HOST_INPUT_DIR}/lowres/:${CONTAINER_INPUT_DIR}:Z"
+    elif [[ ${CASE_NAME} == *"highres"* ]]; then
+        VOLUMES="${VOLUMES} -v ${HOST_INPUT_DIR}/highres/:${CONTAINER_INPUT_DIR}:Z"
     fi
+    
     if [[ "$RUN_TYPE" == "hybrid" ]]; then
         VOLUMES="${VOLUMES} -v ${HOST_CAM_SRC_DIR}:/cam_src:ro,Z -v ${HOST_MODELS_DIR}:${CONTAINER_MODELS_DIR}:ro,Z"
     fi
