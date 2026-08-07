@@ -44,7 +44,7 @@ We use containers (Podman-HPC) and a central script (`manage_cesm.sh`) to stream
 1. You need an account with hub.docker.com - I used my GitHub account to create an account.
 2. Create a personal access token in your account settings. This is needed for logging into you account via the CLI below...
 3. Run the following on Isambard’s login node `podman-hpc login docker.io -u <YOUR_USERNAME> --authfile ~/my_docker_auth.json​`
-4. Then run `podman-hpc pull jamesbriant/cesm_ftorch​`
+4. Then run `podman-hpc pull docker.io/jamesbriant/cesm_ftorch​`
 
 **Alternatively**, you can build the containers yourself. This is useful if you want to make changes to the CESM codebase or the FTorch inference code. There are 3 containers to build sequentially. These establish the CESM environment.
 
