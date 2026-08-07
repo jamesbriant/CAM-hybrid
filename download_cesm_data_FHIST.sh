@@ -3,18 +3,15 @@
 # ==============================================================================
 # CESM Input Data Downloader
 # ==============================================================================
-# Example:
-#   ./download_cesm_data.sh FHIST lowres
 
 set -e
 
-if [ -z "$1" ] || [ -z "$2" ] || [[ ! "$2" =~ ^(lowres|highres)$ ]]; then
-    echo "Usage: $0 <COMPSET> <lowres|highres>"
+if [ -z "$1" ] || [[ ! "$1" =~ ^(lowres|highres)$ ]]; then
+    echo "Usage: $0 <lowres|highres>"
     exit 1
 fi
 
-COMPSET=$1
-RES_KEY=$2
+RES_KEY=$1
 if [ "$RES_KEY" == "lowres" ]; then
     RES_ARG="f19_f19_mg17"
 else
@@ -23,7 +20,7 @@ fi
 
 # Paths based on the parent framework
 PROJECTDIR="/projects/u6t"
-HOST_INPUT_DIR="${PROJECTDIR}/CAM-hybrid-oxford/CAM_input_files/${COMPSET}/${RES_KEY}"
+HOST_INPUT_DIR="${PROJECTDIR}/CAM-hybrid-oxford/CAM_input_files/${RES_KEY}"
 CONTAINER_IMAGE="docker.io/jamesbriant/cesm_ftorch"
 AUTH="--authfile $HOME/my_docker_auth.json"
 
@@ -35,23 +32,14 @@ podman-hpc run -i --rm --pull=never $AUTH \
     -v "${HOST_INPUT_DIR}:/root/cesm/inputdata:Z" \
     "${CONTAINER_IMAGE}" /bin/bash <<EOF
 set -e
-echo "-> Creating dummy case for ${COMPSET} (${RES_KEY})..."
+echo "-> Creating dummy case for ${RES_KEY}..."
 cd /opt/cesm/cime/scripts
-
-if [ "${COMPSET}" = "FHIST" ]; then
-    ./create_newcase --case /tmp/dummy_case_${COMPSET}_${RES_KEY} --compset ${COMPSET} --res ${RES_ARG} --run-unsupported
-else
-    ./create_newcase --case /tmp/dummy_case_${COMPSET}_${RES_KEY} --compset ${COMPSET} --res ${RES_ARG}
-fi
-
-cd /tmp/dummy_case_${COMPSET}_${RES_KEY}
-
-if [ "${COMPSET}" = "FHIST" ]; then
-    echo "-> Setting RUN_TYPE=startup and RUN_STARTDATE=1984-01-01 for FHIST compset..."
-    ./xmlchange RUN_TYPE=startup,RUN_STARTDATE=1984-01-01
-fi
+./create_newcase --case /tmp/dummy_case_${RES_KEY} --compset FHIST --res ${RES_ARG} --run-unsupported
 
 echo "-> Setting up case..."
+cd /tmp/dummy_case_${RES_KEY}
+./xmlchange RUN_TYPE=startup,RUN_STARTDATE=1984-01-01
+
 ./case.setup
 
 echo "-> Generating namelists to determine required data..."
