@@ -3,17 +3,20 @@
 # ==============================================================================
 # CESM 2.1.5 Case Manager for Isambard-AI (Multi-Node Ready)
 # ==============================================================================
+# Examples:
+#   ./manage_cesm.sh create hybrid FHIST lowres 31 years namelist.txt
+#   ./manage_cesm.sh build hybrid FHIST_31years_lowres_user_nl_cam 2
 
 set -e # Exit immediately on error
 
 # --- ⚙️ CONFIGURATION ---
-HOST_BASE_DIR="${PROJECTDIR}/CAM-hybrid"
+HOST_BASE_DIR="${PROJECTDIR}/CAM-hybrid-oxford"
 HOST_CASES_DIR="${HOST_BASE_DIR}/cases"
 HOST_ARCHIVES_DIR="${HOST_BASE_DIR}/archives"
 HOST_INPUT_DIR="${HOST_BASE_DIR}/CAM_input_files"
 #HOST_SCRATCH_DIR="${HOST_BASE_DIR}/scratch"
 # Pointing to the high-speed volatile Lustre file system
-HOST_SCRATCH_DIR="${SCRATCHDIR}/CAM-hybrid/scratch"
+HOST_SCRATCH_DIR="${SCRATCHDIR}/CAM-hybrid-oxford/scratch"
 
 # --- Hybrid Mode Paths ---
 HOST_CUSTOM_CAM_DIR="${HOST_BASE_DIR}/CAM_hybrid/cam"
@@ -22,7 +25,7 @@ HOST_CAM_SRC_DIR="${HOST_CUSTOM_CAM_DIR}/src/physics/cam"
 
 # --- Container Configuration ---
 CONTAINER_IMAGE="docker.io/jamesbriant/cesm_ftorch"
-AUTH="--authfile $HOME/my_docker_auth.json"
+AUTH="--authfile \$HOME/my_docker_auth.json"
 CONTAINER_CASES_DIR="/cases"
 CONTAINER_ARCHIVE_DIR="/root/cesm/archive"
 CONTAINER_MODELS_DIR="/models"
@@ -42,7 +45,9 @@ usage() {
     echo "Usage: $0 <mode> <type> [options...]"
     echo "Modes:"
     echo "  create   Create and configure a new CESM case."
+    echo "           $0 create <standard|hybrid> <COMPSET> <lowres|highres> <SIM_LENGTH> <SIM_UNITS> <NAMELIST> [REST_FREQ REST_UNIT]"
     echo "  build    Build case and generate a Slurm submission script."
+    echo "           $0 build <standard|hybrid> <CASE_NAME> [NUM_NODES]"
     exit 1
 }
 
@@ -72,8 +77,8 @@ fi
 # MODE: CREATE
 # ==============================================================================
 if [[ "$MODE" == "create" ]]; then
-    if [[ "$#" -lt 4 ]]; then log_err "Missing arguments for 'create'"; usage; fi
-    RESOLUTION_KEY=$1; SIM_LENGTH=$2; SIM_UNITS=$3; NAMELIST_FILE=$4
+    if [[ "$#" -lt 5 ]]; then log_err "Missing arguments for 'create'"; usage; fi
+    COMPSET=$1; RESOLUTION_KEY=$2; SIM_LENGTH=$3; SIM_UNITS=$4; NAMELIST_FILE=$5
     NAMELIST_FILENAME=$(basename "${NAMELIST_FILE}")
     if [[ "${NAMELIST_FILE}" != /* ]]; then NAMELIST_FILE="${PWD}/${NAMELIST_FILE}"; fi
     
@@ -85,8 +90,8 @@ if [[ "$MODE" == "create" ]]; then
     
     XML_REST_COMMAND=""
     REST_INFO=""
-    if [ "$#" -eq 6 ]; then
-        REST_FREQ=$5; REST_UNIT=$6
+    if [ "$#" -eq 7 ]; then
+        REST_FREQ=$6; REST_UNIT=$7
         REST_INFO="_rest${REST_FREQ}${REST_UNIT}"
         XML_REST_COMMAND="./xmlchange REST_N=${REST_FREQ},REST_OPTION=n${REST_UNIT};"
     fi
@@ -96,7 +101,7 @@ if [[ "$MODE" == "create" ]]; then
     NAMELIST_BASENAME=${NAMELIST_BASENAME%-hybrid}
     NAMELIST_BASENAME=${NAMELIST_BASENAME%_hybrid}
 
-    CASE_NAME="F2000climo_${SIM_LENGTH}${SIM_UNITS}_${RES_NAME}_${NAMELIST_BASENAME}${REST_INFO}"
+    CASE_NAME="${COMPSET}_${SIM_LENGTH}${SIM_UNITS}_${RES_NAME}_${NAMELIST_BASENAME}${REST_INFO}"
     if [[ "$RUN_TYPE" == "hybrid" ]]; then CASE_NAME="${CASE_NAME}_hybrid"; fi
     
     CONTAINER_NAME="cesm-create-${CASE_NAME}-${DATETIME}"
@@ -104,7 +109,7 @@ if [[ "$MODE" == "create" ]]; then
     log_info "Preparing to launch container to create case '${CASE_NAME}'..."
     log_info "Podman container name will be: ${CONTAINER_NAME}"
     
-    podman-hpc run -i --rm --pull=never --gpu $AUTH \
+    podman-hpc run -i --rm --pull=never --gpu \$AUTH \
         --name "${CONTAINER_NAME}" \
         -v "${HOST_CASES_DIR}:${CONTAINER_CASES_DIR}:Z" \
         -v "${HOST_CAM_SRC_DIR}:/cam_src:ro,Z" \
@@ -116,7 +121,12 @@ echo "[CONTAINER] $(date +'%H:%M:%S') - Starting case creation script inside con
 
 echo "[CONTAINER] $(date +'%H:%M:%S') - Executing create_newcase..."
 cd /opt/cesm/cime/scripts
-./create_newcase --case /cases/${CASE_NAME} --compset F2000climo --res ${RES_ARG}
+
+if [ "${COMPSET}" = "FHIST" ]; then
+    ./create_newcase --case /cases/${CASE_NAME} --compset ${COMPSET} --res ${RES_ARG} --run-unsupported
+else
+    ./create_newcase --case /cases/${CASE_NAME} --compset ${COMPSET} --res ${RES_ARG}
+fi
 
 echo "[CONTAINER] $(date +'%H:%M:%S') - Configuring user_nl_cam..."
 cd /cases/${CASE_NAME}
@@ -131,7 +141,11 @@ if [[ "${RUN_TYPE}" == "hybrid" ]]; then
 fi
 
 echo "[CONTAINER] $(date +'%H:%M:%S') - Executing xmlchange and case.setup..."
-./xmlchange STOP_N=${SIM_LENGTH},STOP_OPTION=n${SIM_UNITS}
+if [ "${COMPSET}" = "FHIST" ]; then
+    ./xmlchange STOP_N=${SIM_LENGTH},STOP_OPTION=n${SIM_UNITS},RUN_TYPE=startup,RUN_STARTDATE=1984-01-01
+else
+    ./xmlchange STOP_N=${SIM_LENGTH},STOP_OPTION=n${SIM_UNITS}
+fi
 ${XML_REST_COMMAND}
 ./case.setup
 
@@ -154,24 +168,24 @@ elif [[ "$MODE" == "build" ]]; then
     
     if [ -z "$CASE_NAME" ]; then log_err "Missing case name."; usage; fi
     
-    # Extract SIM_LENGTH and SIM_UNITS from CASE_NAME
-    # Example format: F2000climo_30days_lowres_user_nl...
+    # Extract COMPSET, SIM_LENGTH and SIM_UNITS from CASE_NAME
+    # Example format: FHIST_30days_lowres_user_nl...
+    COMPSET="unknown"
+    if [[ "${CASE_NAME}" =~ ^([^_]+)_ ]]; then
+        COMPSET="${BASH_REMATCH[1]}"
+    fi
     SIM_LENGTH=1
     SIM_UNITS="unknown"
-    if [[ "${CASE_NAME}" =~ ^F2000climo_([0-9]+)([a-zA-Z]+)_ ]]; then
+    if [[ "${CASE_NAME}" =~ ^[^_]+_([0-9]+)([a-zA-Z]+)_ ]]; then
         SIM_LENGTH="${BASH_REMATCH[1]}"
         SIM_UNITS="${BASH_REMATCH[2]}"
     fi
     
     HOST_CASE_PATH="${HOST_CASES_DIR}/${CASE_NAME}"
     
-    # Simplify archive name: Remove F2000climo_ and user_nl* combinations
-    SHORT_NAME=$(echo "${CASE_NAME}" | sed -E 's/^F2000climo_//' | sed -E 's/_user_nl_[a-zA-Z0-9_\-]+//')
-    if [[ "$RUN_TYPE" == "hybrid" ]]; then
-        SHORT_NAME="${SHORT_NAME}_hybrid"
-    fi
-    HOST_ARCHIVE_PATH="${HOST_ARCHIVES_DIR}/${SHORT_NAME}_${NUM_NODES}nodes-${DATETIME}"
-    
+    # Use the full case name for the archive directory to preserve all metadata
+    HOST_ARCHIVE_PATH="${HOST_ARCHIVES_DIR}/${CASE_NAME}_${NUM_NODES}nodes-${DATETIME}"
+
     log_info "Validating case path: ${HOST_CASE_PATH}"
     if [ ! -d "${HOST_CASE_PATH}" ]; then
         log_err "Case directory not found. Did you run 'create' first?"
@@ -188,14 +202,14 @@ elif [[ "$MODE" == "build" ]]; then
     # We must mount the input directory during Phase 1 so the downloaded data is saved to the host!
     INPUT_MOUNT=""
     if [[ ${CASE_NAME} == *"lowres"* ]]; then
-        INPUT_MOUNT="-v ${HOST_INPUT_DIR}/lowres/:${CONTAINER_INPUT_DIR}:Z"
-        mkdir -p "${HOST_INPUT_DIR}/lowres/"
+        INPUT_MOUNT="-v ${HOST_INPUT_DIR}/${COMPSET}/lowres/:${CONTAINER_INPUT_DIR}:Z"
+        mkdir -p "${HOST_INPUT_DIR}/${COMPSET}/lowres/"
     elif [[ ${CASE_NAME} == *"highres"* ]]; then
-        INPUT_MOUNT="-v ${HOST_INPUT_DIR}/highres/:${CONTAINER_INPUT_DIR}:Z"
-        mkdir -p "${HOST_INPUT_DIR}/highres/"
+        INPUT_MOUNT="-v ${HOST_INPUT_DIR}/${COMPSET}/highres/:${CONTAINER_INPUT_DIR}:Z"
+        mkdir -p "${HOST_INPUT_DIR}/${COMPSET}/highres/"
     fi
 
-    podman-hpc run -i --rm --pull=never --gpu $AUTH \
+    podman-hpc run -i --rm --pull=never --gpu \$AUTH \
         -v "${HOST_CASES_DIR}:${CONTAINER_CASES_DIR}:Z" \
         -v "${HOST_CAM_SRC_DIR}:/cam_src:ro,Z" \
         -v "${HOST_SCRATCH_DIR}:/root/cesm/scratch:Z" \
@@ -241,9 +255,9 @@ EOF
     VOLUMES="-v ${HOST_CASES_DIR}:${CONTAINER_CASES_DIR}:Z -v ${HOST_ARCHIVE_PATH}:${CONTAINER_ARCHIVE_DIR}/${CASE_NAME}:Z -v ${HOST_SCRATCH_DIR}:/root/cesm/scratch:Z"
     
     if [[ ${CASE_NAME} == *"lowres"* ]]; then
-        VOLUMES="${VOLUMES} -v ${HOST_INPUT_DIR}/lowres/:${CONTAINER_INPUT_DIR}:Z"
+        VOLUMES="${VOLUMES} -v ${HOST_INPUT_DIR}/${COMPSET}/lowres/:${CONTAINER_INPUT_DIR}:Z"
     elif [[ ${CASE_NAME} == *"highres"* ]]; then
-        VOLUMES="${VOLUMES} -v ${HOST_INPUT_DIR}/highres/:${CONTAINER_INPUT_DIR}:Z"
+        VOLUMES="${VOLUMES} -v ${HOST_INPUT_DIR}/${COMPSET}/highres/:${CONTAINER_INPUT_DIR}:Z"
     fi
     
     if [[ "$RUN_TYPE" == "hybrid" ]]; then
@@ -276,6 +290,8 @@ ${GPU_STR}
 echo "[SLURM] \$(date +'%Y-%m-%d %H:%M:%S') - Job \${SLURM_JOB_NAME} (ID: \${SLURM_JOB_ID}) started."
 echo "[SLURM] \$(date +'%Y-%m-%d %H:%M:%S') - Allocated Nodes: \${SLURM_JOB_NODELIST}"
 
+nvidia-smi || echo "[SLURM] Warning: nvidia-smi not found. This may be a CPU-only job."
+
 # Record job start time for timing metadata
 JOB_START_TIME=\$(date +%s)
 JOB_START_DATE=\$(date +'%Y-%m-%d %H:%M:%S')
@@ -286,8 +302,11 @@ mkdir -p ${HOST_SCRATCH_DIR}/${CASE_NAME}/run/timing/checkpoints
 # Executing across the high-speed fabric
 echo "[SLURM] \$(date +'%Y-%m-%d %H:%M:%S') - Launching podman-hpc via srun..."
 
+# Safely initialize the podman-hpc temp directory to avoid concurrent mkdir race conditions
+srun --nodes=${NUM_NODES} --ntasks-per-node=1 podman-hpc run --rm "${CONTAINER_IMAGE}" echo "Node prepped"
+
 srun --mpi=pmi2 ${SRUN_GPU_STR} \\
-    podman-hpc run --rm --pull=never --openmpi-pmi2 --gpu $AUTH --ipc=host \\
+    podman-hpc run --rm --pull=never --openmpi-pmi2 --gpu \$AUTH --ipc=host \\
     ${VOLUMES} \\
     -w /root/cesm/scratch/${CASE_NAME}/run \\
     "${CONTAINER_IMAGE}" \\
